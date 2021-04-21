@@ -869,6 +869,109 @@ else {
     ch_methyldackel_results_for_multiqc = Channel.from(false)
 }
 
+/* 
+ * STEP NEW!! methylation calling - CGmaptools
+ */
+process cgmap_meth_calling {
+    tag "$name"
+    publishDir "${params.outdir}/cgmaptools", mode: 'copy',
+    saveAs: {filename -> "cgmap_methyl_call/$filename"}
+
+    input:
+    set val(name), file(bam) from ch_bam_cgmaptools
+    
+    output:
+    set val(name), file("*_meth_call") into ch_cgmap_meth_call_results 
+    
+    script:
+    """
+    cgmaptools convert bam2cgmap -b $bam -g $fasta -o ${name}_meth_call   
+    """ 
+    }
+
+/*
+shell: 
+    '''
+    echo "hello"
+    '''
+*/
+/*STEP NEW2!! CGmap_visualization
+ */
+process cgmap_visualisation {
+    tag "$name"
+    publishDir "${params.outdir}/cgmaptools", mode: 'copy',
+    saveAs: {filename -> "cgmap_figures_data/$filename" }
+    input:
+    set val(name), file('*.CGmap.gz'), file('*.ATCGmap.gz') from ch_cgmap_meth_call_results
+    
+    output:
+    set val(name), file("*_cgmap_visualization") into ch_cgmap_visualization   //maybe later add to channel to create the html file??//
+    //parts of script eg. c -> discuss what this should be or should request input from user?? //
+    script:
+    """
+    cgmaptools mbin $cg_map -c 10 -f pdf -p ${name}_mbins -t ${name} > ${name}_mbins.data
+    cgmaptools oac bin -i $atcg_map -f pdf -p ${name}_oac -t ${name} > ${name}_oac.data
+    """
+    }
+
+
+/*STEP NEW3!! Convert_cgmap_methKit
+ */
+/* process cgmap_conversion_methkit 
+{
+    tag "$name"
+    publishDir "${params.outdir}/methKit", mode: 'copy',
+    saveAs: {filename -> "methyl_kit/$filename" }
+    
+    input:
+    set val(name), file('*.CGmap') from ch_cgmap_meth_call_results
+    
+    output:
+    set val(name), file("*_MKit") into ch_cgmap_to_MKit 
+    script:
+    //add shell script to run python into your baseDir//
+    """
+    gunzip ${*.CGmap.gz}
+    python ${baseDir}/CGMap_ToMethylKit.py ${*.CGmap} > ${name}.MKit
+    """
+    } */
+
+/*STEP NEW4!! Run_MKit
+ */
+/*process get_stats_mkit {
+    tag "$name"
+    publishDir "${params.outdir}/methKit", mode: 'copy',
+    saveAs: {filename -> "methyl_kit/$filename" } 
+    
+    input:
+    set val(name), file("*_MKit") from ch_cgmap_to_MKit
+    
+    output:
+    set val(name), file("*_MKit_stat") into ch_MKit_results
+    
+    script:
+    //make baseDir for R script and invoke from here//
+    """
+    R ${baseDir}methylkit_rscript.r // make r script more flexible //
+    """
+    } */
+			
+			/*STEP make output file for WP4
+			*/
+			/*	                {
+			tag "$name"
+			publishDir "${params.outdir}/WP4_output", mode: 'copy'
+			
+			  input:
+			  set val(name), file(CGmap2) from ch_cgmap_meth_call_results
+		      output:
+		      set val(name), file("*_WP4") into ch_WP4 
+		      script:
+		      //add shell script to run python into your baseDir//
+		       """
+		       python ${baseDir}/python_script_for_changing_data.py ${CGmap2} > ${name}.txt/*.bam  //Make a meeting to discuss this with Mario //
+		       """
+                                } */
 
 /*
  * STEP 8 - Qualimap

@@ -1,19 +1,12 @@
-FROM nfcore/base:1.13.3
-LABEL authors="Phil Ewels" \
-      description="Docker image containing all software requirements for the nf-core/methylseq pipeline"
+FROM nfcore/base:1.9
 
-# Install libtbb system dependency for bowtie2
-RUN apt-get update \
-      && apt-get install -y libtbb-dev \
-      && apt-get clean -y \
-      && rm -rf /var/lib/apt/lists/*
-
-# Install the conda environment
 COPY environment.yml /
-RUN conda env create --quiet -f /environment.yml && conda clean -a
+RUN conda env create -f /environment.yml && conda clean -a
+RUN rm /environment.yml
 
-# Add conda installation dir to PATH (instead of doing 'conda activate')
-ENV PATH /opt/conda/envs/nf-core-methylseq-1.6/bin:$PATH
+ENV PATH /opt/conda/envs/nf-core-methylseq-1.4/bin:$PATH
 
-# Dump the details of the installed packages to a file for posterity
-RUN conda env export --name nf-core-methylseq-1.6 > nf-core-methylseq-1.6.yml
+RUN git clone --branch v0.1.2 --depth 1 https://github.com/guoweilong/cgmaptools.git /usr/local/src/cgmaptools && \
+    bash -c 'cd /usr/local/src/cgmaptools && ./install.sh' && \
+    bash -c 'ln -s /usr/local/src/cgmaptools/cgmaptools /usr/local/bin'
+
