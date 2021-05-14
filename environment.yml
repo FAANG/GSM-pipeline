@@ -26,7 +26,7 @@ dependencies:
   - bioconda::picard=2.25.1
   - bioconda::bwameth=0.2.2
   - bioconda::methyldackel=0.5.2
-  # bsseeker alligner
+    # bsseeker alligner
   - bioconda::bs-seeker2=2.1.7
    #MethylKitR pipeline
   - bioconda::bioconductor-methylkit=1.16.0

@@ -556,7 +556,7 @@ if( params.aligner =~ /bismark/ ){
      * STEP 4 - Bismark deduplicate
      */
     if( params.skip_deduplication || params.rrbs ) {
-        ch_bam_for_bismark_deduplicate.into { ch_bam_dedup_for_bismark_methXtract; ch_bam_dedup_for_qualimap }
+        ch_bam_for_bismark_deduplicate.into { ch_bam_dedup_for_bismark_methXtract; ch_bam_dedup_for_qualimap; ch_bam_cgmaptools }
         ch_bismark_dedup_log_for_bismark_report = Channel.from(false)
         ch_bismark_dedup_log_for_bismark_summary = Channel.from(false)
         ch_bismark_dedup_log_for_multiqc  = Channel.from(false)
@@ -570,7 +570,7 @@ if( params.aligner =~ /bismark/ ){
             set val(name), file(bam) from ch_bam_for_bismark_deduplicate
 
             output:
-            set val(name), file("*.deduplicated.bam") into ch_bam_dedup_for_bismark_methXtract, ch_bam_dedup_for_qualimap
+            set val(name), file("*.deduplicated.bam") into ch_bam_dedup_for_bismark_methXtract, ch_bam_dedup_for_qualimap, ch_bam_cgmaptools
             set val(name), file("*.deduplication_report.txt") into ch_bismark_dedup_log_for_bismark_report, ch_bismark_dedup_log_for_bismark_summary, ch_bismark_dedup_log_for_multiqc
 
             script:
@@ -734,7 +734,7 @@ if( params.aligner == 'bwameth' ){
         file wherearemyfiles from ch_wherearemyfiles_for_bwamem_align.collect()
 
         output:
-        set val(name), file('*.bam') into ch_bam_for_samtools_sort_index_flagstat, ch_bam_for_preseq
+        set val(name), file('*.bam') into ch_bam_for_samtools_sort_index_flagstat, ch_bam_for_preseq, ch_bam_cgmaptools
         file "where_are_my_files.txt"
 
         script:
@@ -790,7 +790,7 @@ if( params.aligner == 'bwameth' ){
      * STEP 5 - Mark duplicates
      */
     if( params.skip_deduplication || params.rrbs ) {
-        ch_bam_sorted_for_markDuplicates.into { ch_bam_dedup_for_methyldackel; ch_bam_dedup_for_qualimap }
+        ch_bam_sorted_for_markDuplicates.into { ch_bam_dedup_for_methyldackel; ch_bam_dedup_for_qualimap; ch_bam_cgmaptools }
         ch_bam_index.set { ch_bam_index_for_methyldackel }
         ch_markDups_results_for_multiqc = Channel.from(false)
     } else {
@@ -803,7 +803,7 @@ if( params.aligner == 'bwameth' ){
             set val(name), file(bam) from ch_bam_sorted_for_markDuplicates
 
             output:
-            set val(name), file("${bam.baseName}.markDups.bam") into ch_bam_dedup_for_methyldackel, ch_bam_dedup_for_qualimap
+            set val(name), file("${bam.baseName}.markDups.bam") into ch_bam_dedup_for_methyldackel, ch_bam_dedup_for_qualimap, ch_bam_cgmaptools
             set val(name), file("${bam.baseName}.markDups.bam.bai") into ch_bam_index_for_methyldackel //ToDo check if this correctly overrides the original channel
             file "${bam.baseName}.markDups_metrics.txt" into ch_markDups_results_for_multiqc
 
@@ -872,9 +872,9 @@ else {
 /* 
  * STEP NEW!! methylation calling - CGmaptools
  */
-process cgmap_meth_calling {
+/*process cgmap_meth_calling {
     tag "$name"
-    publishDir "${params.outdir}/cgmaptools", mode: 'copy',
+    publishDir "${params.outdir}/cgmaptools", mode: params.publish_dir_mode,
     saveAs: {filename -> "cgmap_methyl_call/$filename"}
 
     input:
@@ -897,10 +897,11 @@ shell:
 */
 /*STEP NEW2!! CGmap_visualization
  */
-process cgmap_visualisation {
+/*process cgmap_visualisation {
     tag "$name"
     publishDir "${params.outdir}/cgmaptools", mode: 'copy',
     saveAs: {filename -> "cgmap_figures_data/$filename" }
+    
     input:
     set val(name), file('*.CGmap.gz'), file('*.ATCGmap.gz') from ch_cgmap_meth_call_results
     
