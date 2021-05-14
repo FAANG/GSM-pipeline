@@ -1,6 +1,6 @@
 FROM nfcore/base:latest
 
-# Install libtbb system dependency for bowtie2
+# 
 RUN apt-get update \
       && apt-get install -y libtbb-dev \
       && apt-get clean -y \
