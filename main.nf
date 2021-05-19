@@ -50,6 +50,7 @@ Channel
 
 ch_splicesites_for_bismark_hisat_align = params.known_splices ? Channel.fromPath(params.known_splices, checkIfExists: true) : Channel.empty()
 
+
 if( params.aligner =~ /bismark/ ){
     assert params.bismark_index || params.fasta : "No reference genome index or fasta file specified"
     ch_wherearemyfiles_for_alignment.set { ch_wherearemyfiles_for_bismark_align }
@@ -92,6 +93,11 @@ else if( params.aligner == 'bwameth' ){
         ch_fasta_for_makeFastaIndex.close()
     }
 }
+
+Channel
+        .fromPath(params.fasta, checkIfExists: true)
+        .ifEmpty { exit 1, "fasta file not found : ${params.fasta}" }
+        .into { ch_fasta_for_cgmaptools }
 
 // Trimming / kit presets
 clip_r1 = params.clip_r1
@@ -875,11 +881,50 @@ else {
 /*process cgmap_meth_calling {
     tag "$name"
     publishDir "${params.outdir}/cgmaptools", mode: params.publish_dir_mode,
-    saveAs: {filename -> "cgmap_methyl_call/$filename"}
+        saveAs: {filename -> "cgmap_methyl_call/$filename"}
 
     input:
-    set val(name), file(bam) from ch_bam_cgmaptools
+    set val(name), file(cytosine_report) from ch_bismark_cpg_for_cgmaptools
+   
+    output:
+    set val(name), file("*_meth_call") into ch_cgmap_meth_call_results 
     
+    script:
+    """
+    cgmaptools convert bismark2cgmap -i $cytosine_report -o ${name}_meth_call   
+    """ 
+    }
+*/
+/* STEP Sort input BAM file
+*/
+
+process sort_bam_file {
+    tag "$name"
+    publishDir "${params.outdir}/sorted_bam", mode: params.publish_dir_mode,
+        saveAs: {filename -> "sorted_bam/$filename"}
+input:
+    set val(name), file(bam), from ch_bam_cgmaptools
+
+output:
+set val(name), file("*.sorted.bam") into ch_sorted_bam
+
+script:
+    """
+    samtools sort -o test.sorted results/bismark_alignments/SSR_INRA_GS_WP1_gluteus_medius_NB_M_2_GACATCTC_L002_R1_001_reduced_trimmed_bismark_bt2.bam
+    """
+}
+
+process cgmap_meth_calling {
+    tag "$name"
+    publishDir "${params.outdir}/cgmaptools", mode: params.publish_dir_mode,
+        saveAs: {filename -> "cgmap_methyl_call/$filename"}
+
+    input:
+    set val(name), 
+        file(sorted.bam), 
+        file(fasta) from ch_sorted_bam
+        .combine(ch_fasta_for_cgmaptools)
+   
     output:
     set val(name), file("*_meth_call") into ch_cgmap_meth_call_results 
     
@@ -1050,7 +1095,7 @@ process multiqc {
     file ('samtools/*') from ch_samtools_stats_results_for_multiqc.flatten().collect().ifEmpty([])
     file ('picard/*') from ch_markDups_results_for_multiqc.flatten().collect().ifEmpty([])
     file ('methyldackel/*') from ch_methyldackel_results_for_multiqc.flatten().collect().ifEmpty([])
-    file ('qualimap/*') from ch_qualimap_results_for_multiqc.collect().ifEmpty([])
+    /*file ('qualimap/*') from ch_qualimap_results_for_multiqc.collect().ifEmpty([])*/
     file ('preseq/*') from preseq_results.collect().ifEmpty([])
     file ('software_versions/*') from ch_software_versions_yaml_for_multiqc.collect()
     file workflow_summary from ch_workflow_summary.collectFile(name: "workflow_summary_mqc.yaml")
