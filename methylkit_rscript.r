@@ -1,10 +1,12 @@
 library(methylKit) #load files
-file.list=list("pig_rrbs_METcall.CGmap.gz.Mkit")
-myobj=methRead(file.list,sample.id=list("s1"),assembly="gg",treatment=c(0))
+args = commandArgs(trailingOnly=TRUE)
+
+file.list=list(args[1])
+myobj=methRead(file.list,sample.id=list(paste0(args[2])),assembly="ss",treatment=c(0))
 save.image()
 #produce methylation histogram
-pdf('Sample1_histogram.pdf')
+pdf('(paste0(args[2]))_hist.pdf')
 getMethylationStats(myobj[[1]],plot=T,both.strands=F)
-pdf('Sample1_cov.pdf')
+pdf('(paste0(args[2]))_cov.pdf')
 getCoverageStats(myobj[[1]],plot=T,both.strands=F)
 dev.off()

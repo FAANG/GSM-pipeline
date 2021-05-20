@@ -911,8 +911,8 @@ input:
         .combine(ch_fasta_for_cgmaptools)
    
 output:
-set val(name), file("*.CGmap.gz") into ch_cgmap_ATCG_file
-set val(name), file("*.ATCGmap.gz") into ch_cgmap_file 
+set val(name), file("*.CGmap.gz") into ch_cgmap_CG_file, ch_cgmap_methkit
+set val(name), file("*.ATCGmap.gz") into ch_cgmap_ATCG_file 
     
 script:
     """
@@ -920,73 +920,100 @@ script:
     """ 
 }
 
-/*STEP NEW2!! CGmap_visualization
+/*STEP NEW2!! CGmap_visualization ATCGmap
  */
-process cgmap_visualisation {
+process cgmap_visualisation_atcgmap {
     tag "$name"
     publishDir "${params.outdir}/cgmaptools", mode: 'copy',
     saveAs: {filename -> "cgmap_figures_data/$filename" }
     
     input:
-    set val(name), file(cgmap) from ch_cgmap_file
+    set val(name), file(atcgmap) from ch_cgmap_ATCG_file
     
     output:
     /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
     file "${name}.OverallCovInBins.pdf" into ch_cgmap_visualization_cove   //maybe later add to channel to create the html file??//
+    file "${name}_oac_bin.data" into ch_cgmap_oac_bin_data
+    file "${name}_oac_stat.data" into ch_cgmap_oac_stat_data
     //parts of script eg. c -> discuss what this should be or should request input from user?? //
     
     script:
     """
-    cgmaptools oac bin -i $cgmap -f pdf -p ${name} -t ${name} > ${name}_oac.data
+    cgmaptools oac bin -i $atcgmap -f pdf -p ${name} -t ${name} > ${name}_oac_bin.data
+
+    cgmaptools oac stat -i $atcgmap -f pdf -p ${name} > ${name}_oac_stat.data
     """
     }
 
-/*
-    file(cgmap) from ch_cgmap_ATCG_file;  
-cgmaptools mbin $CGmap -c 10 -f pdf -p ${name}_mbins -t ${name} > ${name}_mbins.data
-*/
+/*STEP NEW3!! CGmap_visualization CGmap
+ */
+process cgmap_visualisation_cgmap {
+    tag "$name"
+    publishDir "${params.outdir}/cgmaptools", mode: 'copy',
+    saveAs: {filename -> "cgmap_figures_data/$filename" }
+    
+    input:
+    set val(name), file(cgmap) from ch_cgmap_CG_file
+    
+    output:
+    /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
+    file "${name}_mec_stat.data" into ch_cgmap_mec_stat
+    file "${name}.MethEffectCove.pdf" into ch_cgmap_mec_stat_figure
+    
+    script:
+    """
+    cgmaptools mec stat -i $cgmap -f pdf -p ${name} > ${name}_mec_stat.data
+    """
+    // still add script for mbin and mstat //
+   // cgmaptools mstat -i  <CGmap file> -c <min coverage per site eg 10> -f pdf -p <name of file> -t <header name> > <data file out name .data> //
+   // cgmaptools mbin <CGmap file> -c <min coverage per site eg 10>  -f pdf -p <name of file> -t <header name> > <data file out name .data> //
+    }
+
 /*STEP NEW3!! Convert_cgmap_methKit
  */
-/* process cgmap_conversion_methkit 
+process cgmap_conversion_methkit 
 {
     tag "$name"
     publishDir "${params.outdir}/methKit", mode: 'copy',
     saveAs: {filename -> "methyl_kit/$filename" }
     
     input:
-    set val(name), file('*.CGmap') from ch_cgmap_meth_call_results
+    set val(name), file(cgmap) from ch_cgmap_methkit
     
     output:
-    set val(name), file("*_MKit") into ch_cgmap_to_MKit 
+    set val(name), file("*.MKit") into ch_cgmap_to_MKit 
     script:
     //add shell script to run python into your baseDir//
-    """
-    gunzip ${*.CGmap.gz}
-    python ${baseDir}/CGMap_ToMethylKit.py ${*.CGmap} > ${name}.MKit
-    """
-    } */
 
-/*STEP NEW4!! Run_MKit
- */
-/*process get_stats_mkit {
+    """
+    python ${baseDir}/CGMap_ToMethylKit.py $cgmap > ${name}.MKit
+    """
+    } 
+
+/*STEP NEW4!! Run_MKit 
+ */  
+process get_stats_mkit {
     tag "$name"
     publishDir "${params.outdir}/methKit", mode: 'copy',
     saveAs: {filename -> "methyl_kit/$filename" } 
     
     input:
-    set val(name), file("*_MKit") from ch_cgmap_to_MKit
+    set val(name), file(methkit) from ch_cgmap_to_MKit
     
     output:
-    set val(name), file("*_MKit_stat") into ch_MKit_results
+    set val(name), file("*_hist.pdf") into ch_MKit_results_hist
+    set val(name), file("*_cov.pdf") into ch_MKit_results_cov
     
     script:
-    //make baseDir for R script and invoke from here//
+    //make baseDir for R script and invoke from here// // make r script more flexible //
     """
-    R ${baseDir}methylkit_rscript.r // make r script more flexible //
+    Rscript ${baseDir}/methylkit_rscript.r $methkit ${name}
     """
-    } */
-			
-			/*STEP make output file for WP4
+    } 
+
+
+/*
+*STEP make output file for WP4
 			*/
 			/*	                {
 			tag "$name"

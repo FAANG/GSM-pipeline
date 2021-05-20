@@ -1,7 +1,7 @@
 import sys
 import gzip
 
-print "chrBase\tchr\tbase\tstrand\tcoverage\tfreqC\tfreqT"
+print("chrBase" + "\t" + "chr" + "\t" + "base" + "\t" + "strand" + "\t" + "coverage" + "\t" + "freqC" + "\t" + "freqT")
 with gzip.open(sys.argv[1],'r') as CGmap:
 	for call in CGmap:
 		chr, strand, pos, type, dinucleotide, perc_C, mC, cov = call.strip().split()
@@ -20,5 +20,5 @@ with gzip.open(sys.argv[1],'r') as CGmap:
 			outlist.append(str(cov))
 			outlist.append(str(perc_C))
 			outlist.append(str(perc_T))
-			print "\t".join(outlist)
+			print("\t".join(outlist))
 
