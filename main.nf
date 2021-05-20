@@ -928,23 +928,23 @@ process cgmap_visualisation {
     saveAs: {filename -> "cgmap_figures_data/$filename" }
     
     input:
-    set val(name), 
-        file(CGmap) from ch_cgmap_ATCG_file;  
-        file(ATCGmap) from ch_cgmap_file
+    set val(name), file(cgmap) from ch_cgmap_file
     
     output:
-    set val(CGmap), file("*.pdf") into ch_cgmap_visualization
-    set val(ATCGmap), file("*.OverallCove.pdf") into ch_cgmap_visualization_cove   //maybe later add to channel to create the html file??//
+    /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
+    file "${name}.OverallCovInBins.pdf" into ch_cgmap_visualization_cove   //maybe later add to channel to create the html file??//
     //parts of script eg. c -> discuss what this should be or should request input from user?? //
     
     script:
     """
-    cgmaptools mbin $CGmap -c 10 -f pdf -p ${name}_mbins -t ${name} > ${name}_mbins.data
-    cgmaptools oac bin -i $ATCGmap -f pdf -p ${name}_oac -t ${name} > ${name}_oac.data
+    cgmaptools oac bin -i $cgmap -f pdf -p ${name} -t ${name} > ${name}_oac.data
     """
     }
 
-
+/*
+    file(cgmap) from ch_cgmap_ATCG_file;  
+cgmaptools mbin $CGmap -c 10 -f pdf -p ${name}_mbins -t ${name} > ${name}_mbins.data
+*/
 /*STEP NEW3!! Convert_cgmap_methKit
  */
 /* process cgmap_conversion_methkit 
