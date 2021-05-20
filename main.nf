@@ -875,26 +875,6 @@ else {
     ch_methyldackel_results_for_multiqc = Channel.from(false)
 }
 
-/* 
- * STEP NEW!! methylation calling - CGmaptools
- */
-/*process cgmap_meth_calling {
-    tag "$name"
-    publishDir "${params.outdir}/cgmaptools", mode: params.publish_dir_mode,
-        saveAs: {filename -> "cgmap_methyl_call/$filename"}
-
-    input:
-    set val(name), file(cytosine_report) from ch_bismark_cpg_for_cgmaptools
-   
-    output:
-    set val(name), file("*_meth_call") into ch_cgmap_meth_call_results 
-    
-    script:
-    """
-    cgmaptools convert bismark2cgmap -i $cytosine_report -o ${name}_meth_call   
-    """ 
-    }
-*/
 /* STEP Sort input BAM file
 */
 
@@ -902,61 +882,65 @@ process sort_bam_file {
     tag "$name"
     publishDir "${params.outdir}/sorted_bam", mode: params.publish_dir_mode,
         saveAs: {filename -> "sorted_bam/$filename"}
+
 input:
-    set val(name), file(bam), from ch_bam_cgmaptools
+    set val(name), file(bam) from ch_bam_cgmaptools
 
 output:
 set val(name), file("*.sorted.bam") into ch_sorted_bam
 
 script:
     """
-    samtools sort -o test.sorted results/bismark_alignments/SSR_INRA_GS_WP1_gluteus_medius_NB_M_2_GACATCTC_L002_R1_001_reduced_trimmed_bismark_bt2.bam
+    samtools sort -o ${name}.sorted.bam $bam
     """
 }
+
+/* 
+ * STEP NEW!! methylation calling - CGmaptools
+ */
 
 process cgmap_meth_calling {
     tag "$name"
     publishDir "${params.outdir}/cgmaptools", mode: params.publish_dir_mode,
         saveAs: {filename -> "cgmap_methyl_call/$filename"}
-
-    input:
+    
+input:
     set val(name), 
-        file(sorted.bam), 
+        file(bam), 
         file(fasta) from ch_sorted_bam
         .combine(ch_fasta_for_cgmaptools)
    
-    output:
-    set val(name), file("*_meth_call") into ch_cgmap_meth_call_results 
+output:
+set val(name), file("*.CGmap.gz") into ch_cgmap_ATCG_file
+set val(name), file("*.ATCGmap.gz") into ch_cgmap_file 
     
-    script:
+script:
     """
     cgmaptools convert bam2cgmap -b $bam -g $fasta -o ${name}_meth_call   
     """ 
-    }
+}
 
-/*
-shell: 
-    '''
-    echo "hello"
-    '''
-*/
 /*STEP NEW2!! CGmap_visualization
  */
-/*process cgmap_visualisation {
+process cgmap_visualisation {
     tag "$name"
     publishDir "${params.outdir}/cgmaptools", mode: 'copy',
     saveAs: {filename -> "cgmap_figures_data/$filename" }
     
     input:
-    set val(name), file('*.CGmap.gz'), file('*.ATCGmap.gz') from ch_cgmap_meth_call_results
+    set val(name), 
+        file(CGmap) from ch_cgmap_ATCG_file;  
+        file(ATCGmap) from ch_cgmap_file
     
     output:
-    set val(name), file("*_cgmap_visualization") into ch_cgmap_visualization   //maybe later add to channel to create the html file??//
+    set val(CGmap), file("*.pdf") into ch_cgmap_visualization
+    set val(ATCGmap), file("*.OverallCove.pdf") into ch_cgmap_visualization_cove   //maybe later add to channel to create the html file??//
     //parts of script eg. c -> discuss what this should be or should request input from user?? //
+    
     script:
     """
-    cgmaptools mbin $cg_map -c 10 -f pdf -p ${name}_mbins -t ${name} > ${name}_mbins.data
-    cgmaptools oac bin -i $atcg_map -f pdf -p ${name}_oac -t ${name} > ${name}_oac.data
+    cgmaptools mbin $CGmap -c 10 -f pdf -p ${name}_mbins -t ${name} > ${name}_mbins.data
+    cgmaptools oac bin -i $ATCGmap -f pdf -p ${name}_oac -t ${name} > ${name}_oac.data
     """
     }
 
