@@ -10,3 +10,5 @@ getMethylationStats(myobj[[1]],plot=T,both.strands=F)
 pdf('(paste0(args[2]))_cov.pdf')
 getCoverageStats(myobj[[1]],plot=T,both.strands=F)
 dev.off()
+
+##,mincov = 1 --> add to myobj= etc if your coverage<10. default is 10 

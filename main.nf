@@ -989,7 +989,7 @@ process cgmap_conversion_methkit
     python ${baseDir}/CGMap_ToMethylKit.py $cgmap > ${name}.MKit
     """
     } 
-
+/*gunzip -f 
 /*STEP NEW4!! Run_MKit 
  */  
 process get_stats_mkit {
