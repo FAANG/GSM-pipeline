@@ -959,9 +959,6 @@ process cgmap_visualisation_cgmap {
     /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
     file "${name}.MethEffectCove.pdf" into ch_cgmap_mec_stat_figure
     file "${name}_mec_stat.data" into ch_cgmap_mec_stat
-    file "${name}.BulkMeth.pdf" into ch_cgmap_mstat_1
-    file "${name}.MethFrag.pdf" into ch_cgmap_mstat_methfrag
-    file "${name}.MethContri.pdf" into ch_cgmap_mstat_conti
     file "${name}.MethInBins.pdf" into chr_cgmap_methbins
     
     script:
@@ -969,10 +966,15 @@ process cgmap_visualisation_cgmap {
     """
     cgmaptools mec stat -i $cgmap -f pdf -p ${name} > ${name}_mec_stat.data
 
+    cgmaptools mbin -i $cgmap -c 10  -f pdf -p ${name} -t ${name} > ${name}_mbin.data
+
     """
     // still add script for mbin and mstat //
    // cgmaptools mstat -i $cgmap -c 10 -f pdf -p ${name} -t ${name} > ${name}_mstat.data//
    //  cgmaptools mbin -i $cgmap -c 10  -f pdf -p ${name} -t ${name} > ${name}_mbin.data //
+   //    file "${name}.BulkMeth.pdf" into ch_cgmap_mstat_1
+   //file "${name}.MethFrag.pdf" into ch_cgmap_mstat_methfrag
+    //file "${name}.MethContri.pdf" into ch_cgmap_mstat_conti//
     }
 
 /*STEP NEW3!! Convert_cgmap_methKit
