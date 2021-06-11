@@ -911,8 +911,8 @@ input:
         .combine(ch_fasta_for_cgmaptools)
    
 output:
-set val(name), file("*.CGmap.gz") into ch_cgmap_CG_file, ch_cgmap_methkit
-set val(name), file("*.ATCGmap.gz") into ch_cgmap_ATCG_file 
+set val(name), file("*.CGmap.gz") into ch_cgmap_CG_file, ch_cgmap_to_extract_CHR, ch_cgmap_methkit
+set val(name), file("*.ATCGmap.gz") into ch_cgmap_ATCG_file, ch_cgmap_ATCG_to_extract_CHR 
     
 script:
     """
@@ -959,8 +959,8 @@ process cgmap_visualisation_cgmap {
     /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
     file "${name}.MethEffectCove.pdf" into ch_cgmap_mec_stat_figure
     file "${name}_mec_stat.data" into ch_cgmap_mec_stat
-    file "${name}.MethInBins.pdf" into chr_cgmap_methbins
-    
+    file "${name}.MethInBins.pdf" into ch_cgmap_methbins
+
     script:
     
     """
@@ -973,6 +973,7 @@ process cgmap_visualisation_cgmap {
    // cgmaptools mstat -i $cgmap -c 10 -f pdf -p ${name} -t ${name} > ${name}_mstat.data//
    //  cgmaptools mbin -i $cgmap -c 10  -f pdf -p ${name} -t ${name} > ${name}_mbin.data //
    //    file "${name}.BulkMeth.pdf" into ch_cgmap_mstat_1
+   // file "${name}_mstat.data" into ch_cgmap_mstat
    //file "${name}.MethFrag.pdf" into ch_cgmap_mstat_methfrag
     //file "${name}.MethContri.pdf" into ch_cgmap_mstat_conti//
     }
@@ -1018,6 +1019,112 @@ process get_stats_mkit {
     Rscript ${baseDir}/methylkit_rscript.r $methkit ${name}
     """
     } 
+/*STEP SELECT only CHR
+*/
+process extract_chr_cgmap 
+{
+    tag "$name"
+    publishDir "${params.outdir}/cgmaptools", mode: params.publish_dir_mode,
+        saveAs: {filename -> "cgmap_methyl_call_CHR/$filename"}
+
+    input:
+    set val(name), 
+    file(cgmap) from ch_cgmap_to_extract_CHR
+           
+    output:
+    /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
+    set val(name), file("*.CGmap.gz") into ch_cgmap_CG_cgm_chr_f
+    
+    shell:
+    '''
+    zcat !{cgmap} | awk ' {OFS ="\\t"} ($1~/^([0-9|X|Y]+)$/) {print "chr"$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16}' | sed 's/--/NaN/g' |gzip > !{name}_CHR.CGmap.gz
+    '''
+}
+//sh ${baseDir}/convert_CGm_file_chr_sorted.sh $cgmap ${name}//
+
+/*STEP SELECT only CHR 2
+*/
+process extract_chr_cgmap_atcg 
+{
+    tag "$name"
+    publishDir "${params.outdir}/cgmaptools", mode: params.publish_dir_mode,
+        saveAs: {filename -> "cgmap_methyl_call_CHR/$filename"}
+
+    input:
+    set val(name), 
+    file(atcgmap) from ch_cgmap_ATCG_to_extract_CHR
+       
+    output:
+    /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
+    set val(name),
+    file("*.ATCGmap.gz") into ch_cgmap_atcgmap_chr 
+
+    shell:
+    '''
+    zcat !{atcgmap} | awk ' {OFS ="\\t"} ($1~/^([0-9|X|Y]+)$/) {print "chr"$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16}' | gzip > !{name}_CHR1.ATCGmap.gz
+    '''
+}
+
+/*STEP NEW2!! CGmap_visualization ATCGmap_SORTED_CHR
+ */
+process cgmap_visualisation_atcgmap_chr {
+    tag "$name"
+    publishDir "${params.outdir}/cgmaptools", mode: 'copy',
+    saveAs: {filename -> "cgmap_figures_data_CHR/$filename" }
+    
+    input:
+    set val(name), file(atcgmap_chr) from ch_cgmap_atcgmap_chr
+    
+    output:
+    /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
+    file "${name}.OverallCovInBins.pdf" into ch_cgmap_visualization_cove_chr   //maybe later add to channel to create the html file??//
+    file "${name}_oac_bin.data" into ch_cgmap_oac_bin_data_chr
+    file "${name}_oac_stat.data" into ch_cgmap_oac_stat_data_chr
+    //parts of script eg. c -> discuss what this should be or should request input from user?? //
+    
+    script:
+    """
+    cgmaptools oac bin -i $atcgmap_chr -f pdf -p ${name} -t ${name} > ${name}_oac_bin.data
+
+    cgmaptools oac stat -i $atcgmap_chr -f pdf -p ${name} > ${name}_oac_stat.data
+    """
+    }
+
+/*STEP NEW3!! CGmap_visualization CGmap_SORTED_CHR 
+ */
+process visualisation_cgmap_sorted_chr {
+    tag "$name"
+    publishDir "${params.outdir}/cgmaptools", mode: 'copy',
+    saveAs: {filename -> "cgmap_figures_data_CHR/$filename" }
+    
+    input:
+    set val(name), file(cgmap_chr) from ch_cgmap_CG_cgm_chr_f
+
+    output:
+    set val(name),
+    file("*.pdf") into ch_cgmap_CHR_figures
+    file "*_mstat.data" into ch_cgmap_CHR_mstat
+    
+    script:
+    """
+    cgmaptools mec stat -i $cgmap_chr -f pdf -p ${name} > ${name}_mec_stat.data
+    cgmaptools mbin -i $cgmap_chr -c 10  -f pdf -p ${name} -t ${name} > ${name}_CHR_mbin.data
+    cgmaptools mstat -i $cgmap_chr -c 10 -f pdf -p ${name} -t ${name} > ${name}_mstat.data
+    """
+    // still add script for mbin and mstat //
+   // cgmaptools mstat -i $cgmap -c 10 -f pdf -p ${name} -t ${name} > ${name}_mstat.data//
+   //  cgmaptools mbin -i $cgmap -c 10  -f pdf -p ${name} -t ${name} > ${name}_mbin.data //
+   //    file "${name}.BulkMeth.pdf" into ch_cgmap_mstat_1
+   //file "${name}.MethFrag.pdf" into ch_cgmap_mstat_methfrag
+    //file "${name}.MethContri.pdf" into ch_cgmap_mstat_conti//
+    //    file "*.MethEffectCove.pdf" into ch_cgmap_CHR_mec_stat_figure
+    //file "*_mec_stat.data" into ch_cgmap_CHR_mec_stat
+    //file "*.MethInBins.pdf" into ch_cgmap_CHR_methbins
+    //file "*.BulkMeth.pdf" into ch_cgmap_CHR_mstat_1
+    //file "*_mstat.data" into ch_cgmap_CHR_mstat
+    //file "*.MethFrag.pdf" into ch_cgmap_CHR_mstat_methfrag
+    //file "*.MethContri.pdf" into ch_cgmap_CHR_mstat_conti
+    }
 
 
 /*
