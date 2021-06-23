@@ -1033,11 +1033,11 @@ process extract_chr_cgmap
            
     output:
     /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
-    set val(name), file("*.CGmap.gz") into ch_cgmap_CG_cgm_chr_f
+    set val(name), file("*.CGmap") into ch_cgmap_CG_cgm_chr_f
     
     shell:
     '''
-    zcat !{cgmap} | awk ' {OFS ="\\t"} ($1~/^([0-9|X|Y]+)$/) {print "chr"$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16}' | sed 's/--/NaN/g' |gzip > !{name}_CHR.CGmap.gz
+    zcat !{cgmap} | awk ' {OFS ="\\t"} ($1~/^([0-9|X|Y]+)$/) {print "chr"$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16}' | sed 's/--/NaN/g' > !{name}_CHR.CGmap
     '''
 }
 //sh ${baseDir}/convert_CGm_file_chr_sorted.sh $cgmap ${name}//
@@ -1105,25 +1105,13 @@ process visualisation_cgmap_sorted_chr {
     file("*.pdf") into ch_cgmap_CHR_figures
     file "*_mstat.data" into ch_cgmap_CHR_mstat
     
+
     script:
     """
     cgmaptools mec stat -i $cgmap_chr -f pdf -p ${name} > ${name}_mec_stat.data
     cgmaptools mbin -i $cgmap_chr -c 10  -f pdf -p ${name} -t ${name} > ${name}_CHR_mbin.data
     cgmaptools mstat -i $cgmap_chr -c 10 -f pdf -p ${name} -t ${name} > ${name}_mstat.data
     """
-    // still add script for mbin and mstat //
-   // cgmaptools mstat -i $cgmap -c 10 -f pdf -p ${name} -t ${name} > ${name}_mstat.data//
-   //  cgmaptools mbin -i $cgmap -c 10  -f pdf -p ${name} -t ${name} > ${name}_mbin.data //
-   //    file "${name}.BulkMeth.pdf" into ch_cgmap_mstat_1
-   //file "${name}.MethFrag.pdf" into ch_cgmap_mstat_methfrag
-    //file "${name}.MethContri.pdf" into ch_cgmap_mstat_conti//
-    //    file "*.MethEffectCove.pdf" into ch_cgmap_CHR_mec_stat_figure
-    //file "*_mec_stat.data" into ch_cgmap_CHR_mec_stat
-    //file "*.MethInBins.pdf" into ch_cgmap_CHR_methbins
-    //file "*.BulkMeth.pdf" into ch_cgmap_CHR_mstat_1
-    //file "*_mstat.data" into ch_cgmap_CHR_mstat
-    //file "*.MethFrag.pdf" into ch_cgmap_CHR_mstat_methfrag
-    //file "*.MethContri.pdf" into ch_cgmap_CHR_mstat_conti
     }
 
 
