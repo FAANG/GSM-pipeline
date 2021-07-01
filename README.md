@@ -1,4 +1,4 @@
-# GENE-SWitCH project methylation analysis pipeline          ![image](https://user-images.githubusercontent.com/55686187/112380639-e8723700-8ce9-11eb-9965-ea186639ceab.png)
+# GSM-pipeline: GENE-SWitCH project methylation analysis pipeline          ![image](https://user-images.githubusercontent.com/55686187/112380639-e8723700-8ce9-11eb-9965-ea186639ceab.png)
 
 author Jani 
 
