@@ -5,10 +5,10 @@ file.list=list(args[1])
 myobj=methRead(file.list,sample.id=list(paste0(args[2])),assembly="ss",treatment=c(0))
 save.image()
 #produce methylation histogram
-pdf('(paste0(args[2]))_hist.pdf')
+pdf(paste(args[2],"_hist.pdf",sep=''))
 getMethylationStats(myobj[[1]],plot=T,both.strands=F)
-pdf('(paste0(args[2]))_cov.pdf')
-getCoverageStats(myobj[[1]],plot=T,both.strands=F)
 dev.off()
 
-##,mincov = 1 --> add to myobj= etc if your coverage<10. default is 10 
+pdf(paste(args[2],"_cov.pdf",sep=''))
+getCoverageStats(myobj[[1]],plot=T,both.strands=F)
+dev.off()
