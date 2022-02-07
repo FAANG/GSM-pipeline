@@ -14,6 +14,12 @@ Schematic of the gs-meth pipeline. In yellow the pre-existing nf-core pipeline, 
 The GENE-SWitCH project has received funding from the European Union’s Horizon 2020 ( https://ec.europ a.eu/programmes/horizon2020/ ) research and innovation program under Grant Agreement No 817998.
 This repository reflects only the listed contributors views. Neither the European Commission nor its Agency REA are responsible for any use that may be made of the information it contains.
 
+# Updated pipeline
+
+Accepts bam file as input. 
+
+Example usage:
+nextflow run GSM-pipeline/ -profile singularity --bam {file}.bam --fasta {reference}.fa --aligner none --skip_alignment
 
 # ![nf-core/methylseq](docs/images/nf-core-methylseq_logo.png)
 
