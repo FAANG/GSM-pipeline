@@ -97,9 +97,7 @@ else if( params.aligner == 'bwameth' ){
 Channel
         .fromPath(params.fasta, checkIfExists: true)
         .ifEmpty { exit 1, "fasta file not found : ${params.fasta}" }
-        .into { ch_fasta_for_cgmaptools; ch_fasta_bismarkIndex_2 }
-
-
+        .into { ch_fasta_for_cgmaptools }
 
 // Trimming / kit presets
 clip_r1 = params.clip_r1
@@ -180,32 +178,11 @@ if (params.input_paths) {
             .ifEmpty { exit 1, 'params.input_paths was empty - no input files supplied' }
             .into { ch_read_files_fastqc; ch_read_files_trimming }
     }
-} 
-
-else if (params.aligner == 'none'){
-    Channel
-        .fromPath(params.bam)
-        .map { file -> tuple(file.baseName, file) }
-        .ifEmpty { exit 1, 'params.bam_paths was empty - no input files supplied' }
-        .set { ch_indep_bam_for_processing }
-}
-else {
+} else {
     Channel
         .fromFilePairs(params.input, size: params.single_end ? 1 : 2)
         .ifEmpty { exit 1, "Cannot find any reads matching: ${params.input}\nNB: Path needs to be enclosed in quotes!\nIf this is single-end data, please specify --single_end on the command line." }
-        .into { ch_read_files_fastqc; ch_read_files_trimming}
-}
-/*        .map { path ->  filename = path.getName()
-            if (filename.endsWith('.bam'))
-                filename = filename.substring(0, filename.length() - 3)
-            return [path, filename] } */
-
-            /* else if (params.aligner == 'none'){
-Channel
-.fromPath(params.bam)
-.map { file -> tuple(file.baseName, file) }
-.ifEmpty { exit 1, 'params.bam_paths was empty - no input files supplied' }
-.set { ch_indep_bam_for_processing }
+        .into { ch_read_files_fastqc; ch_read_files_trimming }
 }
 
 ////////////////////////////////////////////////////
@@ -217,9 +194,9 @@ log.info NfcoreSchema.params_summary_log(workflow, params, json_schema)
 def summary = [:]
 if (workflow.revision) summary['Pipeline Release'] = workflow.revision
 summary['Run Name']  = workflow.runName
+summary['Input']     = params.input
 summary['Aligner']   = params.aligner
 summary['Data Type'] = params.single_end ? 'Single-End' : 'Paired-End'
-if (params.input)           summary['Input']     = params.input
 if(params.known_splices)    summary['Spliced alignment'] =  'Yes'
 if(params.slamseq)          summary['SLAM-seq'] = 'Yes'
 if(params.local_alignment)  summary['Local alignment'] = 'Yes'
@@ -227,12 +204,10 @@ if(params.genome)           summary['Genome']    = params.genome
 if(params.bismark_index)    summary['Bismark Index'] = params.bismark_index
 if(params.bwa_meth_index)   summary['BWA-Meth Index'] = "${params.bwa_meth_index}*"
 if(params.fasta)            summary['Fasta Ref'] = params.fasta
-if(params.bam)              summary['Bam input'] = params.bam
 if(params.fasta_index)      summary['Fasta Index'] = params.fasta_index
 if(params.rrbs)             summary['RRBS Mode'] = 'On'
 if(params.relax_mismatches) summary['Mismatch Func'] = "L,0,-${params.num_mismatches} (Bismark default = L,0,-0.2)"
 if(params.skip_trimming)    summary['Trimming Step'] = 'Skipped'
-if(params.skip_alignment)   summary['Trimming Step','FastQC step', 'Build index step', 'Alignment step'] = 'Skipped'
 if(params.pbat)             summary['Trim Profile'] = 'PBAT'
 if(params.single_cell)      summary['Trim Profile'] = 'Single Cell'
 if(params.epignome)         summary['Trim Profile'] = 'TruSeq (EpiGnome)'
@@ -359,7 +334,7 @@ if( !params.bismark_index && params.aligner =~ /bismark/ ){
         file fasta from ch_fasta_for_makeBismarkIndex
 
         output:
-        file "BismarkIndex" into ch_bismark_index_for_bismark_align, ch_bismark_index_for_bismark_methXtract , ch_bismark_index_for_bismark_methXtract_2
+        file "BismarkIndex" into ch_bismark_index_for_bismark_align, ch_bismark_index_for_bismark_methXtract
 
         script:
         aligner = params.aligner == 'bismark_hisat' ? '--hisat2' : '--bowtie2'
@@ -419,9 +394,6 @@ if( !params.fasta_index && params.aligner == 'bwameth' ){
 /*
  * STEP 1 - FastQC
  */
-if( params.skip_alignment ){
-    ch_fastqc_results_for_multiqc = Channel.from(false)
-} else { 
 process fastqc {
     tag "$name"
     label 'process_medium'
@@ -441,20 +413,14 @@ process fastqc {
     fastqc --quiet --threads $task.cpus $reads
     """
 }
-}
 
 /*
  * STEP 2 - Trim Galore!
  */
-if( params.skip_trimming){
+if( params.skip_trimming ){
     ch_trimmed_reads_for_alignment = ch_read_files_trimming
     ch_trim_galore_results_for_multiqc = Channel.from(false)
-} 
-else if (params.skip_alignment) {
-    ch_read_files_trimming = Channel.from(false)
-    ch_trim_galore_results_for_multiqc = Channel.from(false)
-}
-else {
+} else {
     process trim_galore {
         tag "$name"
         publishDir "${params.outdir}/trim_galore", mode: params.publish_dir_mode,
@@ -600,27 +566,25 @@ if( params.aligner =~ /bismark/ ){
         ch_bismark_dedup_log_for_bismark_report = Channel.from(false)
         ch_bismark_dedup_log_for_bismark_summary = Channel.from(false)
         ch_bismark_dedup_log_for_multiqc  = Channel.from(false)
-    } 
-
-    else{
+    } else {
         process bismark_deduplicate {
             tag "$name"
             publishDir "${params.outdir}/bismark_deduplicated", mode: params.publish_dir_mode,
                 saveAs: {filename -> filename.indexOf(".bam") == -1 ? "logs/$filename" : "$filename"}
-                
+
             input:
-            set val(name), file(bam) from ch_bam_for_bismark_deduplicate 
+            set val(name), file(bam) from ch_bam_for_bismark_deduplicate
 
             output:
             set val(name), file("*.deduplicated.bam") into ch_bam_dedup_for_bismark_methXtract, ch_bam_dedup_for_qualimap, ch_bam_cgmaptools
             set val(name), file("*.deduplication_report.txt") into ch_bismark_dedup_log_for_bismark_report, ch_bismark_dedup_log_for_bismark_summary, ch_bismark_dedup_log_for_multiqc
-                
+
             script:
             fq_type = params.single_end ? '-s' : '-p'
             """
             deduplicate_bismark $fq_type --bam $bam
             """
-            }
+        }
     }
 
     /*
@@ -646,7 +610,6 @@ if( params.aligner =~ /bismark/ ){
         set val(name), file("*splitting_report.txt") into ch_bismark_splitting_report_for_bismark_report, ch_bismark_splitting_report_for_bismark_summary, ch_bismark_splitting_report_for_multiqc
         set val(name), file("*.M-bias.txt") into ch_bismark_mbias_for_bismark_report, ch_bismark_mbias_for_bismark_summary, ch_bismark_mbias_for_multiqc
         file '*.{png,gz}'
-        set val(name), file("*.CX_report.txt") into ch_bismark_to_cgmap_OG
 
         script:
         comprehensive = params.comprehensive ? '--comprehensive --merge_non_CpG' : ''
@@ -682,9 +645,7 @@ if( params.aligner =~ /bismark/ ){
         } else {
             """
             bismark_methylation_extractor $comprehensive $meth_cutoff \\
-                $multicore $buffer \\
-                --CX_context
-                --cytosine_report \\
+                $multicore $buffer $cytosine_report \\
                 --ignore_r2 2 \\
                 --ignore_3prime_r2 2 \\
                 --bedGraph \\
@@ -797,10 +758,9 @@ if( params.aligner == 'bwameth' ){
     /*
      * STEP 4.- samtools flagstat on samples
      */
-    if ( params.skip_alignment || params.aligner == 'bwameth' )  
     process samtools_sort_index_flagstat {
         tag "$name"
-        publishDir "${params.outdir}/bam_processing", mode: params.publish_dir_mode,
+        publishDir "${params.outdir}/bwa-mem_alignments", mode: params.publish_dir_mode,
             saveAs: {filename ->
                 if(filename.indexOf("report.txt") > 0) "logs/$filename"
                 else if( (!params.save_align_intermeds && !params.skip_deduplication && !params.rrbs).every() && filename == "where_are_my_files.txt") filename
@@ -813,8 +773,8 @@ if( params.aligner == 'bwameth' ){
         file wherearemyfiles from ch_wherearemyfiles_for_samtools_sort_index_flagstat.collect()
 
         output:
-        set val(name), file("${bam.baseName}.sorted.bam") into ch_indep_bam_sorted, ch_bam_sorted_for_markDuplicates
-        set val(name), file("${bam.baseName}.sorted.bam.bai") into ch_bam_index, ch_indep_bam_index
+        set val(name), file("${bam.baseName}.sorted.bam") into ch_bam_sorted_for_markDuplicates
+        set val(name), file("${bam.baseName}.sorted.bam.bai") into ch_bam_index
         file "${bam.baseName}_flagstat_report.txt" into ch_flagstat_results_for_multiqc
         file "${bam.baseName}_stats_report.txt" into ch_samtools_stats_results_for_multiqc
         file "where_are_my_files.txt"
@@ -847,10 +807,9 @@ if( params.aligner == 'bwameth' ){
 
             input:
             set val(name), file(bam) from ch_bam_sorted_for_markDuplicates
-                        
 
             output:
-            set val(name), file("${name}.markDups.bam") into ch_bam_dedup_for_methyldackel, ch_bam_dedup_for_qualimap, ch_bam_cgmaptools
+            set val(name), file("${bam.baseName}.markDups.bam") into ch_bam_dedup_for_methyldackel, ch_bam_dedup_for_qualimap, ch_bam_cgmaptools
             set val(name), file("${bam.baseName}.markDups.bam.bai") into ch_bam_index_for_methyldackel //ToDo check if this correctly overrides the original channel
             file "${bam.baseName}.markDups_metrics.txt" into ch_markDups_results_for_multiqc
 
@@ -916,219 +875,53 @@ else {
     ch_methyldackel_results_for_multiqc = Channel.from(false)
 }
 
-
-/*BismarkIndex_for methXtract */
-
-if( params.aligner == 'none' ){
-    process makeBismarkIndex_2 {
-        publishDir path: { params.save_reference ? "${params.outdir}/reference_genome" : params.outdir },
-                   saveAs: { params.save_reference ? it : null }, mode: params.publish_dir_mode
-
-        input:
-        file fasta from ch_fasta_bismarkIndex_2
-
-        output:
-        file "BismarkIndex" into ch_bismark_index_for_bismark_methXtract_2
-
-        script:
-        """
-        mkdir BismarkIndex
-        cp $fasta BismarkIndex/
-        bismark_genome_preparation --bowtie2 BismarkIndex
-        """
-    }
-}
-
-/* Deduplicate for BAM file input */
-
-if (params.aligner == 'none') {
-    process markDuplicates_bam_input {
-        tag "${name}"
-        publishDir "${params.outdir}/bam_markDuplicates", mode: params.publish_dir_mode,
-            saveAs: {filename -> "$filename"}
-
-    input:
-        //set bam from ch_indep_bam_for_processing
-        set val(name), file(bam) from ch_indep_bam_for_processing      
-
-    output:
-        set val(name), file("*.markDups.bam") into ch_bam_resort, ch_bam_dedup_for_qualimap_indep
-        set val(name), file("*.markDups.bam.bai") into ch_bam_index_indep 
-        file "*.markDups_metrics.txt" into ch_markDups_results_for_multiqc_indep
-            
-    script:
-        
-        //name = bam[0].toString() - ~/(.bam)?$/
-        
-        if( !task.memory ){
-            log.info "[Picard MarkDuplicates] Available memory not known - defaulting to 3GB. Specify process memory requirements to change this."
-            avail_mem = 3
-            } else {
-                avail_mem = task.memory.toGiga()
-            }
-
-            """
-            picard -Xmx${avail_mem}g MarkDuplicates \\
-                INPUT=$bam \\
-                OUTPUT=${name}.markDups.bam \\
-                METRICS_FILE=${name}.markDups_metrics.txt \\
-                REMOVE_DUPLICATES=false \\
-                ASSUME_SORTED=true \\
-                PROGRAM_RECORD_ID='null' \\
-                VALIDATION_STRINGENCY=LENIENT
-            samtools index ${name}.markDups.bam
-            """
-        }
-}
-
-/*Sort bam file by RG
-*/
-if (params.aligner == 'none') {
-    process sort_bam_RG {
-        tag "${name}"
-        publishDir "${params.outdir}/bam_sort_RG", mode: params.publish_dir_mode 
-                
-        input:
-        set val(name), file(bam) from ch_bam_resort
-
-        output:
-        set val(name), file("*.sorted.bam") into ch_bam_meth_call
-
-        script:
-                """
-                samtools sort -n -@ 6 -m 3G $bam -o ${name}.sorted.bam 
-                """
-        }
-}
-/*Bismark methylation calling to produce cytosine report
-*/
-if (params.aligner == 'none') {
-    process bismark_methXtract_2 {
-        tag "${name}"
-        publishDir "${params.outdir}/bismark_methylation_calls", mode: params.publish_dir_mode
-
-                    input:
-                    set val(name), file(bam) from ch_bam_meth_call
-                    file index from ch_bismark_index_for_bismark_methXtract_2
-
-                    output:
-                    set val(name), file("*splitting_report.txt") into ch_bismark_splitting_report_for_bismark_report_2, ch_bismark_splitting_report_for_bismark_summary_2, ch_bismark_splitting_report_for_multiqc_2
-                    set val(name), file("*.M-bias.txt") into ch_bismark_mbias_for_bismark_report_2, ch_bismark_mbias_for_bismark_summary_2, ch_bismark_mbias_for_multiqc_2
-                    set val (name), file("*.*_report.txt") into ch_bismark_to_cgmap, ch_view_bs
-                    file '*.{png,gz}' 
-
-        script:
-        multicore = ''
-        if( task.cpus ){
-            // Numbers based on Bismark docs
-            ccore = ((task.cpus as int) / 3) as int
-            if( ccore > 1 ){
-              multicore = "--multicore $ccore"
-            }
-        }
-        buffer = ''
-        if( task.memory ){
-            mbuffer = (task.memory as nextflow.util.MemoryUnit) - 2.GB
-            // only set if we have more than 6GB available
-            if( mbuffer.compareTo(4.GB) == 1 ){
-              buffer = "--buffer_size ${mbuffer.toGiga()}G"
-            }
-        }
-//
-            """
-            bismark_methylation_extractor --genome $index --cytosine_report --CX_context\\
-                $multicore $buffer \\
-                --ignore_r2 2 \\
-                --ignore_3prime_r2 2 \\
-                --counts \\
-                -p \\
-                --no_overlap \\
-                --report \\
-                $bam
-            """
-                    }
-                }
-
-/*Bismark to cgmaptools
-*/
-/*if( params.aligner = 'bismark' ){
-   ch_bismark_to_cgmap_OG = ch_bismark_to_cgmap
-} */
-if ( params.skip_alignment ) {
-    process CX_report_to_cgmap {
-        tag "$name"
-        publishDir "${params.outdir}/cgmaptools_methyl_bismark", mode: params.publish_dir_mode,
-            saveAs: {filename -> "$filename"}
-        
-    input:
-        set val(name), 
-            file(cgmap) from ch_bismark_to_cgmap
-    
-    output:
-    set val(name), file("*.CGmap") into ch_cgmap_PE, ch_cgmap_to_extract_CHR_PE, ch_cgmap_methkit_PE
-        
-    script:
-        """
-        cgmaptools convert bismark2cgmap -i $cgmap -o ${name}_meth_call.CGmap
-        """ 
-    }
-}
 /* STEP Sort input BAM file
 */
-if (params.skip_alignment) {
-    ch_sorted_bam = Channel.from(false)
-} else {
-    process sort_bam_file {
-        tag "$name"
-        publishDir "${params.outdir}/sorted_bam", mode: params.publish_dir_mode,
-            saveAs: {filename -> "sorted_bam/$filename"}
 
-    input:
-        set val(name), file(bam) from ch_bam_cgmaptools
+process sort_bam_file {
+    tag "$name"
+    publishDir "${params.outdir}/sorted_bam", mode: params.publish_dir_mode,
+        saveAs: {filename -> "sorted_bam/$filename"}
 
-    output:
-    set val(name), file("*.sorted.bam") into ch_sorted_bam, ch_sorted_for_preseq
+input:
+    set val(name), file(bam) from ch_bam_cgmaptools
 
-    script:
-        """
-        samtools sort -@ 6 -m 3G -o ${name}.sorted.bam $bam
-        """
-    }
+output:
+set val(name), file("*.sorted.bam") into ch_sorted_bam, ch_sorted_for_preseq
+
+script:
+    """
+    samtools sort -o ${name}.sorted.bam $bam
+    """
 }
 
 /* 
  * STEP NEW!! methylation calling - CGmaptools
  */
-if (params.skip_alignment) {
-    ch_cgmap_CG_file = Channel.from(false)
-} else { 
-    process cgmap_meth_calling {
-            tag "$name"
-            publishDir "${params.outdir}/cgmaptools", mode: params.publish_dir_mode,
-                saveAs: {filename -> "cgmap_methyl_call/$filename"}
-            
-        input:
-            set val(name), 
-                file(bam), 
-                file(fasta) from ch_sorted_bam
-                .combine(ch_fasta_for_cgmaptools)
-        
-        output:
-        set val(name), file("*.CGmap.gz") into ch_cgmap_CG_file, ch_cgmap_to_extract_CHR, ch_cgmap_for_MKit
-        set val(name), file("*.ATCGmap.gz") into ch_cgmap_ATCG_file, ch_cgmap_ATCG_to_extract_CHR 
-            
-        script:
-            """
-            cgmaptools convert bam2cgmap -b $bam -g $fasta -o ${name}_meth_call   
-            """ 
-        }
+
+process cgmap_meth_calling {
+    tag "$name"
+    publishDir "${params.outdir}/cgmaptools", mode: params.publish_dir_mode,
+        saveAs: {filename -> "cgmap_methyl_call/$filename"}
+    
+input:
+    set val(name), 
+        file(bam), 
+        file(fasta) from ch_sorted_bam
+        .combine(ch_fasta_for_cgmaptools)
+   
+output:
+set val(name), file("*.CGmap.gz") into ch_cgmap_CG_file, ch_cgmap_to_extract_CHR, ch_cgmap_methkit
+set val(name), file("*.ATCGmap.gz") into ch_cgmap_ATCG_file, ch_cgmap_ATCG_to_extract_CHR 
+    
+script:
+    """
+    cgmaptools convert bam2cgmap -b $bam -g $fasta -o ${name}_meth_call   
+    """ 
 }
+
 /*STEP NEW2!! CGmap_visualization ATCGmap
  */
-if (params.skip_alignment) {
-    ch_cgmap_visualization_cove = Channel.from(false)
-} else {
-    
 process cgmap_visualisation_atcgmap {
     tag "$name"
     publishDir "${params.outdir}/cgmaptools", mode: 'copy',
@@ -1139,8 +932,9 @@ process cgmap_visualisation_atcgmap {
     
     output:
     /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
-    file "*.pdf" into ch_cgmap_visualization_cove   //maybe later add to channel to create the html file??//
-    file "*.data" into ch_cgmap_data
+    file "${name}.OverallCovInBins.pdf" into ch_cgmap_visualization_cove   //maybe later add to channel to create the html file??//
+    file "${name}_oac_bin.data" into ch_cgmap_oac_bin_data
+    file "${name}_oac_stat.data" into ch_cgmap_oac_stat_data
     //parts of script eg. c -> discuss what this should be or should request input from user?? //
     
     script:
@@ -1150,59 +944,61 @@ process cgmap_visualisation_atcgmap {
     cgmaptools oac stat -i $atcgmap -f pdf -p ${name} > ${name}_oac_stat.data
     """
     }
-}
 
 /*STEP NEW3!! CGmap_visualization CGmap
  */
- if (params.skip_alignment) {
-    ch_cgmap_CG_file = ch_cgmap_PE
- }
-    process cgmap_visualisation_cgmap {
-        tag "$name"
-        publishDir "${params.outdir}/cgmaptools", mode: 'copy',
-        saveAs: {filename -> "cgmap_figures_data/$filename" }
-        
-        input:
-        set val(name), file(cgmap) from ch_cgmap_CG_file
-        
-        output:
-        /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
-        file "*.pdf" into ch_cgmap_vis_figure
-        file "*.data" into ch_cgmap_mec_stat
+process cgmap_visualisation_cgmap {
+    tag "$name"
+    publishDir "${params.outdir}/cgmaptools", mode: 'copy',
+    saveAs: {filename -> "cgmap_figures_data/$filename" }
+    
+    input:
+    set val(name), file(cgmap) from ch_cgmap_CG_file
+    
+    output:
+    /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
+    file "${name}.MethEffectCove.pdf" into ch_cgmap_mec_stat_figure
+    file "${name}_mec_stat.data" into ch_cgmap_mec_stat
+    file "${name}.MethInBins.pdf" into ch_cgmap_methbins
 
-        script:
-        
-        """
-        cgmaptools mec stat -i $cgmap -f pdf -p ${name} > ${name}_mec_stat.data
+    script:
+    
+    """
+    cgmaptools mec stat -i $cgmap -f pdf -p ${name} > ${name}_mec_stat.data
 
-        cgmaptools mbin -i $cgmap -c 10  -f pdf -p ${name} -t ${name} > ${name}_mbin.data
+    cgmaptools mbin -i $cgmap -c 10  -f pdf -p ${name} -t ${name} > ${name}_mbin.data
 
-        cgmaptools mstat -i $cgmap -c 10 -f pdf -p ${name} -t ${name} > ${name}_mstat.data
-        """
+    """
+    // still add script for mbin and mstat //
+   // cgmaptools mstat -i $cgmap -c 10 -f pdf -p ${name} -t ${name} > ${name}_mstat.data//
+   //  cgmaptools mbin -i $cgmap -c 10  -f pdf -p ${name} -t ${name} > ${name}_mbin.data //
+   //    file "${name}.BulkMeth.pdf" into ch_cgmap_mstat_1
+   // file "${name}_mstat.data" into ch_cgmap_mstat
+   //file "${name}.MethFrag.pdf" into ch_cgmap_mstat_methfrag
+    //file "${name}.MethContri.pdf" into ch_cgmap_mstat_conti//
     }
 
 /*STEP NEW3!! Convert_cgmap_methKit
  */
-if (params.aligner == 'none') {
-    ch_cgmap_for_MKit = ch_cgmap_methkit_PE
- }
-    process cgmap_conversion_methkit {
-        tag "$name"
-        publishDir "${params.outdir}/methKit", mode: 'copy',
-        saveAs: {filename -> "methyl_kit/$filename" }
-        
-        input:
-        set val(name), file(cgmap) from ch_cgmap_for_MKit
-        
-        output:
-        set val(name), file("*.MKit") into ch_cgmap_to_MKit 
-        script:
+process cgmap_conversion_methkit 
+{
+    tag "$name"
+    publishDir "${params.outdir}/methKit", mode: 'copy',
+    saveAs: {filename -> "methyl_kit/$filename" }
+    
+    input:
+    set val(name), file(cgmap) from ch_cgmap_methkit
+    
+    output:
+    set val(name), file("*.MKit") into ch_cgmap_to_MKit 
+    script:
+    //add shell script to run python into your baseDir//
 
-        """
-        python ${baseDir}/CGMap_ToMethylKit.py $cgmap > ${name}.MKit
-        """
-        } 
- 
+    """
+    python ${baseDir}/CGMap_ToMethylKit.py $cgmap > ${name}.MKit
+    """
+    } 
+/*gunzip -f 
 /*STEP NEW4!! Run_MKit 
  */  
 process get_stats_mkit {
@@ -1218,16 +1014,13 @@ process get_stats_mkit {
     set val(name), file("*_cov.pdf") into ch_MKit_results_cov
     
     script:
-    
+    //make baseDir for R script and invoke from here// // make r script more flexible //
     """
     Rscript ${baseDir}/methylkit_rscript.r $methkit ${name}
     """
     } 
 /*STEP SELECT only CHR
 */
- if (params.skip_alignment) {
-    ch_cgmap_to_extract_CHR = ch_cgmap_to_extract_CHR_PE
- }
 process extract_chr_cgmap 
 {
     tag "$name"
@@ -1239,20 +1032,18 @@ process extract_chr_cgmap
     file(cgmap) from ch_cgmap_to_extract_CHR
            
     output:
-    
+    /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
     set val(name), file("*.CGmap") into ch_cgmap_CG_cgm_chr_f
     
     shell:
     '''
-    awk ' {OFS ="\\t"} ($1~/^([0-9|X|Y|W|Z]+)$/) {print "chr"$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16}' !{cgmap} | sed 's/--/NaN/g' > !{name}_CHR.CGmap
+    zcat !{cgmap} | awk ' {OFS ="\\t"} ($1~/^([0-9|X|Y]+)$/) {print "chr"$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16}' | sed 's/--/NaN/g' > !{name}_CHR.CGmap
     '''
 }
- /*zcat !{cgmap} |
+//sh ${baseDir}/convert_CGm_file_chr_sorted.sh $cgmap ${name}//
+
 /*STEP SELECT only CHR 2
 */
-if (params.skip_alignment) {
-    ch_cgmap_ATCG_to_extract_CHR = Channel.from(false)
-} else {
 process extract_chr_cgmap_atcg 
 {
     tag "$name"
@@ -1264,20 +1055,18 @@ process extract_chr_cgmap_atcg
     file(atcgmap) from ch_cgmap_ATCG_to_extract_CHR
        
     output:
+    /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
     set val(name),
     file("*.ATCGmap.gz") into ch_cgmap_atcgmap_chr 
 
     shell:
     '''
-    zcat !{atcgmap} | awk ' {OFS ="\\t"} ($1~/^([0-9|X|Y|W|Z]+)$/) {print "chr"$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16}' | gzip > !{name}_CHR.ATCGmap.gz
+    zcat !{atcgmap} | awk ' {OFS ="\\t"} ($1~/^([0-9|X|Y]+)$/) {print "chr"$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16}' | gzip > !{name}_CHR1.ATCGmap.gz
     '''
 }
-}
+
 /*STEP NEW2!! CGmap_visualization ATCGmap_SORTED_CHR
  */
-if (params.skip_alignment) {
-    ch_cgmap_atcgmap_chr = Channel.from(false)
-} else {
 process cgmap_visualisation_atcgmap_chr {
     tag "$name"
     publishDir "${params.outdir}/cgmaptools", mode: 'copy',
@@ -1287,6 +1076,7 @@ process cgmap_visualisation_atcgmap_chr {
     set val(name), file(atcgmap_chr) from ch_cgmap_atcgmap_chr
     
     output:
+    /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
     file "${name}.OverallCovInBins.pdf" into ch_cgmap_visualization_cove_chr   //maybe later add to channel to create the html file??//
     file "${name}_oac_bin.data" into ch_cgmap_oac_bin_data_chr
     file "${name}_oac_stat.data" into ch_cgmap_oac_stat_data_chr
@@ -1299,37 +1089,53 @@ process cgmap_visualisation_atcgmap_chr {
     cgmaptools oac stat -i $atcgmap_chr -f pdf -p ${name} > ${name}_oac_stat.data
     """
     }
-}
+
 /*STEP NEW3!! CGmap_visualization CGmap_SORTED_CHR 
  */
-     process visualisation_cgmap_sorted_chr {
-        tag "$name"
-        publishDir "${params.outdir}/cgmaptools", mode: 'copy',
-        saveAs: {filename -> "cgmap_figures_data_CHR/$filename" }
-        
-        input:
-        set val(name), file(cgmap_chr) from ch_cgmap_CG_cgm_chr_f
+process visualisation_cgmap_sorted_chr {
+    tag "$name"
+    publishDir "${params.outdir}/cgmaptools", mode: 'copy',
+    saveAs: {filename -> "cgmap_figures_data_CHR/$filename" }
+    
+    input:
+    set val(name), file(cgmap_chr) from ch_cgmap_CG_cgm_chr_f
 
-        output:
-        set val(name),
-        file("*.pdf") into ch_cgmap_CHR_figures
-        file "*_mstat.data" into ch_cgmap_CHR_mstat
-        
+    output:
+    set val(name),
+    file("*.pdf") into ch_cgmap_CHR_figures
+    file "*_mstat.data" into ch_cgmap_CHR_mstat
+    
 
-        script:
-        """
-        cgmaptools mec stat -i $cgmap_chr -f pdf -p ${name} > ${name}_mec_stat.data
-        cgmaptools mbin -i $cgmap_chr -c 10  -f pdf -p ${name} -t ${name} > ${name}_CHR_mbin.data
-        cgmaptools mstat -i $cgmap_chr -c 10 -f pdf -p ${name} -t ${name} > ${name}_mstat.data
-        """
-        }
+    script:
+    """
+    cgmaptools mec stat -i $cgmap_chr -f pdf -p ${name} > ${name}_mec_stat.data
+    cgmaptools mbin -i $cgmap_chr -c 10  -f pdf -p ${name} -t ${name} > ${name}_CHR_mbin.data
+    cgmaptools mstat -i $cgmap_chr -c 10 -f pdf -p ${name} -t ${name} > ${name}_mstat.data
+    """
+    }
 
-/* STEP 8 - Qualimap
+
+/*
+*STEP make output file for WP4
+			*/
+			/*	                {
+			tag "$name"
+			publishDir "${params.outdir}/WP4_output", mode: 'copy'
+			
+			  input:
+			  set val(name), file(CGmap2) from ch_cgmap_meth_call_results
+		      output:
+		      set val(name), file("*_WP4") into ch_WP4 
+		      script:
+		      //add shell script to run python into your baseDir//
+		       """
+		       python ${baseDir}/python_script_for_changing_data.py ${CGmap2} > ${name}.txt/*.bam  //Make a meeting to discuss this with Mario //
+		       """
+                                } */
+
+/*
+ * STEP 8 - Qualimap
  */
-
-if (params.skip_alignment) {
-    ch_bam_dedup_for_qualimap_indep.set { ch_bam_dedup_for_qualimap }
-}
 process qualimap {
     tag "$name"
     publishDir "${params.outdir}/qualimap", mode: params.publish_dir_mode
@@ -1361,7 +1167,7 @@ process qualimap {
 /*
  * STEP 9 - preseq
  */
-/*process preseq {
+process preseq {
     tag "$name"
     publishDir "${params.outdir}/preseq", mode: 'copy'
 
@@ -1401,7 +1207,7 @@ process multiqc {
     file ('picard/*') from ch_markDups_results_for_multiqc.flatten().collect().ifEmpty([])
     file ('methyldackel/*') from ch_methyldackel_results_for_multiqc.flatten().collect().ifEmpty([])
     /*file ('qualimap/*') from ch_qualimap_results_for_multiqc.collect().ifEmpty([])*/
-    /*file ('preseq/*') from preseq_results.collect().ifEmpty([])*/
+    file ('preseq/*') from preseq_results.collect().ifEmpty([])
     file ('software_versions/*') from ch_software_versions_yaml_for_multiqc.collect()
     file workflow_summary from ch_workflow_summary.collectFile(name: "workflow_summary_mqc.yaml")
 
