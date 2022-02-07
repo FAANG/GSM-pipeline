@@ -957,16 +957,17 @@ process cgmap_visualisation_cgmap {
     
     output:
     /*set val(CGmap), file("*.pdf") into ch_cgmap_visualization */
-    file "${name}.MethEffectCove.pdf" into ch_cgmap_mec_stat_figure
+    file("*.pdf") into ch_cgmap_stat_figure
     file "${name}_mec_stat.data" into ch_cgmap_mec_stat
-    file "${name}.MethInBins.pdf" into ch_cgmap_methbins
-
+    
     script:
     
     """
     cgmaptools mec stat -i $cgmap -f pdf -p ${name} > ${name}_mec_stat.data
 
     cgmaptools mbin -i $cgmap -c 10  -f pdf -p ${name} -t ${name} > ${name}_mbin.data
+
+    cgmaptools mstat -i $cgmap_chr -c 10 -f pdf -p ${name} -t ${name} > ${name}_mstat.data
 
     """
     // still add script for mbin and mstat //
