@@ -3,7 +3,7 @@ import gzip
 import io
 
 print("chrBase" + "\t" + "chr" + "\t" + "base" + "\t" + "strand" + "\t" + "coverage" + "\t" + "freqC" + "\t" + "freqT")
-CGmap = gzip.open(sys.argv[1],'rt')
+CGmap = open(sys.argv[1],'rt')
 f = io.BufferedReader(CGmap)
 for call in CGmap:
         chr, strand, pos, type, dinucleotide, perc_C, mC, cov = call.strip().split()
